@@ -436,8 +436,6 @@ abstract class ApiController extends BaseController
                 throw new Exception("Unknown HTTP method specified in {$method->name} : {$tags['method']}", 501);
             }
 
-            //$params = DocParser::getActionArgsHelp($method);
-
             $enums = isset($tags['enum']) ? $this->mixedToArray($tags['enum']) : [];
             $availableEnums = [];
             foreach ($enums as $enum) {
@@ -488,13 +486,21 @@ abstract class ApiController extends BaseController
                     $schema['type'] = $type;
                 }
                 $def['responses'][200]['schema'] = $schema;
-
+                if (isset($tags['emitsHeader'])) {
+                    $def['responses'][200]['headers'] = [];
+                    $headers = $this->mixedToArray($tags['emitsHeader']);
+                    foreach ($headers as $header) {
+                        list($type, $name, $description) = $this->tokenize($header, 3);
+                        list($type, $format) = $this->getTypeAndFormat($type);
+                        $def['responses'][200]['headers'][$name] = [
+                            'type' => $type,
+                            'format' => $format,
+                            'description' => $description
+                        ];
+                    }
+                }
             }
-            /*    $def['responses'][200] = [
-                    'description' => $tags['return'],
-                    'schema' => $tags['return'],
-                ];
-    */
+
             if (isset($tags['errors'])) {
                 $errors = $this->mixedToArray($tags['errors']);
                 foreach ($errors as $error) {
@@ -643,8 +649,9 @@ abstract class ApiController extends BaseController
     private function getTypeAndFormat($type)
     {
         switch ($type) {
-            case 'int64': return ['integer', 'int64'];
-            case 'int32': return ['integer', 'int32'];
+            case 'int64':
+            case 'int32': return ['integer', $type];
+            case 'date-time': return ['string', $type];
             default: return [$type, null];
         }
     }
