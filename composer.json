@@ -1,0 +1,22 @@
+{
+    "name": "machour/yii2-swagger-api",
+    "description": "Yii 2 Swagger API",
+    "keywords": ["yii2", "swagger", "api"],
+    "type": "yii2-extension",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Mehdi Achour",
+            "email": "machour@gmail.com"
+        }
+    ],
+    "reqapire": {
+        "yiisoft/yii2": "*",
+        "machour/yii2-swagger-ui": "*"
+    },
+    "autoload": {
+        "psr-4": {
+             "machour\\yii2\\swagger\\api\\": ""
+        }
+    }
+}
