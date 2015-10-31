@@ -10,7 +10,7 @@
             "email": "machour@gmail.com"
         }
     ],
-    "reqapire": {
+    "require": {
         "yiisoft/yii2": "*",
         "machour/yii2-swagger-ui": "*"
     },
