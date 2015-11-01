@@ -77,6 +77,13 @@ abstract class ApiController extends BaseController
     ];
 
     /**
+     * Holds all definitions
+     *
+     * @var array
+     */
+    private $definitions = [];
+
+    /**
      * Gets the security definitions for the API
      *
      * @abstract
@@ -195,6 +202,17 @@ abstract class ApiController extends BaseController
     }
 
     /**
+     * Checks if the given $type is an ApiModel
+     *
+     * @param $type
+     * @return bool Returns TRUE if it's a model class, FALSE otherwise
+     */
+    private function isDefinedType($type)
+    {
+        return in_array($type, $this->definitions);
+    }
+
+    /**
      * Generates the swagger configuration file
      *
      * This method will inspect the current API controller and generate the
@@ -220,6 +238,13 @@ abstract class ApiController extends BaseController
 
         $classDoc = $class->getDocComment();
         $tags = ApiDocParser::parseDocCommentTags($classDoc);
+
+        $this->definitions[] = 'ApiResponse';
+        $ret['definitions']['ApiResponse'] = $this->parseModel('machour\\yii2\\swagger\\api\\ApiResponse', false);
+        if (isset($tags['definition'])) {
+            $this->definitions = array_merge($this->definitions, $tags['definition']);
+            $ret['definitions'] = array_merge($ret['definitions'], $this->parseModels($this->mixedToArray($tags['definition'])));
+        }
 
         $ret['info']['description'] = ApiDocParser::parseDocCommentDetail($classDoc);
 
@@ -290,12 +315,6 @@ abstract class ApiController extends BaseController
 
         $ret['paths'] = $this->parseMethods($class, $produces);
 
-        $ret['definitions'] = [];
-        if (isset($tags['definition'])) {
-            $ret['definitions'] = $this->parseModels($this->mixedToArray($tags['definition']));
-        }
-        $ret['definitions']['ApiResponse'] = $this->parseModel('machour\\yii2\\swagger\\api\\ApiResponse', false);
-
         if (isset($tags['externalDocs'])) {
             $externalDocs = $this->tokenize($tags['externalDocs'], 2);
             $ret['externalDocs'] = [
@@ -365,6 +384,9 @@ abstract class ApiController extends BaseController
     private function parseProperties($class)
     {
         $ret = [];
+
+        $defaults = $class->getDefaultProperties();
+
         foreach ($class->getProperties() as $property) {
             $tags = ApiDocParser::parseDocCommentTags($property->getDocComment());
             list($type, $description) = $this->tokenize($tags['var'], 2);
@@ -374,12 +396,12 @@ abstract class ApiController extends BaseController
                 $type = str_replace('[]', '', $type);
                 $p['type'] = 'array';
                 $p['xml'] = ['name' => preg_replace('!s$!', '', $property->name), 'wrapped' => true];
-                if (class_exists($this->modelsNamespace . '\\' . $type)) {
+                if ($this->isDefinedType($type)) {
                     $p['items'] = ['$ref' => $this->getDefinition($type)];
                 } else {
                     $p['items'] = ['type' => $type];
                 }
-            } elseif (class_exists($this->modelsNamespace . '\\' . $type)) {
+            } elseif ($this->isDefinedType($type)) {
                 $p['$ref'] = $this->getDefinition($type);
             } else {
                 $p['type'] = $type;
@@ -399,6 +421,10 @@ abstract class ApiController extends BaseController
 
             if (!empty($description)) {
                 $p['description'] = $description;
+            }
+
+            if (!is_null($defaults[$property->name])) {
+                $p['default'] = $defaults[$property->name];
             }
 
             $ret[$property->name] = $p;
@@ -477,11 +503,19 @@ abstract class ApiController extends BaseController
                 if (strpos($type, '[]') > 0) {
                     $schema['type'] = 'array';
                     $type = str_replace('[]', '', $type);
-                    if (class_exists($this->modelsNamespace . '\\' . $type)) {
+                    if ($this->isDefinedType($type)) {
                         $schema['items'] = ['$ref' => $this->getDefinition($type)];
                     }
-                } elseif (class_exists($this->modelsNamespace . '\\' . $type)) {
+                } elseif ($this->isDefinedType($type)) {
                     $schema = ['$ref' => $this->getDefinition($type)];
+                } elseif (preg_match('!^Map\((.*)\)$!', $type, $matches)) {
+                    // Swaggers Map Primitive
+                    $schema['type'] = 'object';
+                    list($type, $format) = $this->getTypeAndFormat($matches[1]);
+                    $schema['additionalProperties'] = ['type' => $type];
+                    if (!is_null($format)) {
+                        $schema['additionalProperties']['format'] = $format;
+                    }
                 } else {
                     $schema['type'] = $type;
                 }
@@ -574,6 +608,17 @@ abstract class ApiController extends BaseController
     private function parseParameters($method, $tags, $availableEnums)
     {
         $ret = [];
+        $constraints = [];
+        if (isset($tags['constraint'])) {
+            foreach ($this->mixedToArray($tags['constraint']) as $constraint) {
+                list($type, $parameter, $value) = $this->tokenize($constraint, 3);
+                $parameter = ltrim($parameter, '$');
+                if (!isset($constraints[$parameter])) {
+                    $constraints[$parameter] = [];
+                }
+                $constraints[$parameter][$type] = $value;
+            }
+        }
         foreach (['parameter' => true, 'optparameter' => false] as $tag => $required) {
             if (isset($tags[$tag])) {
                 $parameters = $this->mixedToArray($tags[$tag]);
@@ -611,6 +656,11 @@ abstract class ApiController extends BaseController
                             }
                         break;
                     }
+                    if (isset($constraints[$name])) {
+                        foreach ($constraints[$name] as $constraint => $value) {
+                            $p[$constraint] = $value;
+                        }
+                    }
                     if (!empty($description)) {
                         $p['description'] = $description;
                     }
@@ -623,7 +673,7 @@ abstract class ApiController extends BaseController
                             $p['items']['default'] = count($availableEnums[$name]) ? $availableEnums[$name][0] : '';
                         }
                         $p['collectionFormat'] = 'csv';
-                    } elseif (class_exists($this->modelsNamespace . '\\' . $type)) {
+                    } elseif ($this->isDefinedType($type)) {
                         $p['schema'] = ['$ref' => $this->getDefinition($type)];
                     } else {
                         list($type, $format) = $this->getTypeAndFormat($type);
