@@ -2,7 +2,7 @@
 
 namespace machour\yii2\swagger\api;
 
-use yii\base\Exception;
+use Exception;
 
 /**
  * This class represents an Api exception, thrown from the Api controller
