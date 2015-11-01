@@ -666,13 +666,23 @@ abstract class ApiController extends BaseController
                     }
                     $p['required'] = $required;
                     if (strpos($type, '[]') > 0) {
-                        $p['type'] = 'array';
-                        $p['items'] = ['type' => str_replace('[]', '', $type)];
-                        if (isset($availableEnums[$name])) {
-                            $p['items']['enum'] = $availableEnums[$name];
-                            $p['items']['default'] = count($availableEnums[$name]) ? $availableEnums[$name][0] : '';
+                        $type = str_replace('[]', '', $type);
+                        if ($this->isDefinedType($type)) {
+                            $p['schema'] = [
+                                'type' => 'array',
+                                'items' => [
+                                    '$ref' => $this->getDefinition($type),
+                                ]
+                            ];
+                        } else {
+                            $p['type'] = 'array';
+                            $p['items'] = ['type' => $type];
+                            if (isset($availableEnums[$name])) {
+                                $p['items']['enum'] = $availableEnums[$name];
+                                $p['items']['default'] = count($availableEnums[$name]) ? $availableEnums[$name][0] : '';
+                            }
+                            $p['collectionFormat'] = 'csv';
                         }
-                        $p['collectionFormat'] = 'csv';
                     } elseif ($this->isDefinedType($type)) {
                         $p['schema'] = ['$ref' => $this->getDefinition($type)];
                     } else {
