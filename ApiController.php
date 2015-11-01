@@ -360,12 +360,24 @@ abstract class ApiController extends BaseController
             throw new Exception("The model definition for $model was not found", 501);
         }
 
-        $class = new ReflectionClass($model);
-
         $ret = [
             'type' => 'object',
-            'properties' => $this->parseProperties($class),
         ];
+
+        $class = new ReflectionClass($model);
+
+        $properties =  $this->parseProperties($class);
+        foreach ($properties as $name => &$property) {
+            if (isset($property['required'])) {
+                unset($property['required']);
+                if (!isset($ret['required'])) {
+                    $ret['required'] = [];
+                }
+                $ret['required'][] = $name;
+            }
+        }
+        $ret['properties'] = $properties;
+
         if ($xml) {
             $ret['xml'] = ['name' => $definition];
         }
@@ -417,6 +429,10 @@ abstract class ApiController extends BaseController
 
             if (isset($tags['example'])) {
                 $p['example'] = $tags['example'];
+            }
+
+            if (isset($tags['required'])) {
+                $p['required'] = true;
             }
 
             if (!empty($description)) {
@@ -491,6 +507,12 @@ abstract class ApiController extends BaseController
             $def['parameters'] = $this->parseParameters($method, $tags, $availableEnums);
 
             $def['responses'] = [];
+
+            if (isset($tags['default'])) {
+                $def['responses']['default'] = [
+                    'description' => $tags['default']
+                ];
+            }
 
             if (isset($tags['return'])) {
                 list($type, $description) = $this->tokenize($tags['return'], 2);
