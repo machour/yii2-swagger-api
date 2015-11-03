@@ -9,6 +9,15 @@ Documentation is at [docs/guide/README.md](docs/guide/README.md).
 [//]: # ([![Total Downloads](https://poser.pugx.org/machour/yii2-swagger-api/downloads.png)](https://packagist.org/packages/machour/yii2-swagger-api))
 [//]: # ([![Build Status](https://travis-ci.org/machour/yii2-swagger-api.svg?branch=master)](https://travis-ci.org/machour/yii2-swagger-ui))
 
+## TODO
+
+* Finish the docblock parsing
+* Add Auth mechanisms
+* Add API versions support
+* Clear cache based on filemtime()
+* Test required parameters & their types
+* Documentation
+
 ## Further reading
 
 More documentation

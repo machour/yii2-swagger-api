@@ -4,13 +4,179 @@ namespace machour\yii2\swagger\api;
 
 
 use ReflectionClass;
+use ReflectionMethod;
 use Yii;
 use yii\base\Configurable;
 use yii\base\Exception;
+use yii\helpers\Url;
 use yii\web\Response;
 
 class ApiGenerator implements Configurable
 {
+
+    /**
+     * Controller level model definition
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#definitionsObject
+     */
+    const T_DEFINITION = 'definition';
+
+    /**
+     * Api version number
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#infoObject
+     */
+    const T_VERSION = 'version';
+
+    /**
+     * Terms of service
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#infoObject
+     */
+    const T_TOS = 'termsOfService';
+
+    /**
+     * Contact email
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#contactObject
+     */
+    const T_CONTACT_EMAIL = 'contactEmail';
+
+    /**
+     * Contact name
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#contactObject
+     */
+    const T_CONTACT_NAME = 'contactName';
+
+    /**
+     * Contact url
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#contactObject
+     */
+    const T_CONTACT_URL = 'contactUrl';
+
+    /**
+     * Api License
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#licenseObject
+     */
+    const T_LICENSE = 'license';
+
+    /**
+     * External Documentation Object for a tag
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#externalDocumentationObject
+     */
+    const T_TAG_EXTERNAL_DOC = 'tagExternalDocs';
+
+    /**
+     * Tag for API documentation control
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#operation-object
+     */
+    const T_TAG = 'tag';
+
+    /**
+     * The host (name or IP) serving the API
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#fixed-fields
+     */
+    const T_HOST = 'host';
+
+    /**
+     * The transfer protocol of the API
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#fixed-fields
+     */
+    const T_SCHEME = 'scheme';
+
+    /**
+     * The HTTP method for the endpoint
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#pathItemObject
+     */
+    const T_METHOD = 'method';
+
+    /**
+     * Mime type that this API can produce
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#fixed-fields
+     */
+    const T_PRODUCES = 'produces';
+
+    /**
+     * Mime type that the endpoint can consume
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#fixed-fields
+     */
+    const T_CONSUMES = 'consumes';
+
+    /**
+     * Security requirement for the endpoint
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#securityRequirementObject
+     */
+    const T_SECURITY = 'security';
+
+    /**
+     * External Documentation Object for the API
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#externalDocumentationObject
+     */
+    const T_EXTERNAL_DOC = 'externalDocs';
+
+    /**
+     * An error returned by the endpoint
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#responseObject
+     */
+    const T_ERRORS = 'errors';
+
+    /**
+     * A valid response returned by the endpoint
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#responseObject
+     */
+    const T_RETURN = 'return';
+
+    /**
+     * An default response returned by the endpoint
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#responseObject
+     */
+    const T_DEFAULT = 'default';
+
+    /**
+     * Property type and description for a model
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#schemaObject
+     */
+    const T_VAR = 'var';
+
+    /**
+     * Enumeration of possible values for a property or parameter
+     * @todo Merge in T_CONSTRAINT
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#parameter-object
+     */
+    const T_ENUM = 'enum';
+
+    /**
+     * Example of value
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#schema-object
+     */
+    const T_EXAMPLE = 'example';
+
+    /**
+     * Type format
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#format
+     */
+    const T_FORMAT = 'format';
+
+    /**
+     * Property or parameter required state
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#fixed-fields-7
+     */
+    const T_REQUIRED = 'required';
+
+    /**
+     * A relative path to an individual endpoint
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#pathItemObject
+     */
+    const T_PATH = 'path';
+
+    /**
+     * A constraint for a parameter
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#items-object
+     */
+    const T_CONSTRAINT = 'constraint';
+
+    /**
+     * A header emitted by the endpoint
+     * @link https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#headers-object
+     */
+    const T_EMITS_HEADER = 'emitsHeader';
+
     /**
      * @var string The models namespace. Must be defined by the daughter class
      */
@@ -70,20 +236,55 @@ class ApiGenerator implements Configurable
     }
 
     /**
+     * @param ReflectionClass|ReflectionMethod $reflection
+     * @param ApiController $parent
+     * @return string
+     */
+    public function fetchDocComment($reflection, $parent = null)
+    {
+        //echo $reflection . "\n";
+        //echo $parent . "\n";
+
+        $found = false;
+
+
+        while (!$found) {
+
+            $doc = $reflection->getDocComment();
+
+            if ($doc) {
+                return $doc;
+            } else {
+                if ($reflection instanceof ReflectionMethod) {
+                    $parentClass = $reflection->getDeclaringClass()->getParentClass();
+                    $reflection = $parentClass->getMethod($reflection->getName());
+                } else {
+                    $reflection = $reflection->getParentClass();
+                }
+            }
+        }
+    }
+
+    /**
      * Generates the swagger configuration file
      *
      * This method will inspect the current API controller and generate the
      * configuration based on the doc blocks found.
      *
+     * @param string $version The version number (the module id)
      * @return array The definition as an array
+     * @throws Exception
      */
-    public function getJson()
+    public function getJson($version)
     {
+
         $ret = [
             'swagger' => $this->swaggerVersion,
-            'info' => [],
+            'info' => [
+                'contact' => [],
+            ],
             'host' => '',
-            'basePath' => '',
+            'basePath' => '/' . $version,
             'tags' => [],
             'schemes' => [],
             'paths' => [],
@@ -91,47 +292,71 @@ class ApiGenerator implements Configurable
             'definitions' => [],
         ];
 
+
         $class = new ReflectionClass($this->controller);
 
-        $classDoc = $class->getDocComment();
+        $classDoc = $this->fetchDocComment($class, ApiController::class);
+        //$classDoc = $class->getDocComment();
         $tags = ApiDocParser::parseDocCommentTags($classDoc);
 
         $this->definitions[] = 'ApiResponse';
         $ret['definitions']['ApiResponse'] = $this->parseModel('machour\\yii2\\swagger\\api\\ApiResponse', false);
-        if (isset($tags['definition'])) {
-            $this->definitions = array_merge($this->definitions, $tags['definition']);
-            $ret['definitions'] = array_merge($ret['definitions'], $this->parseModels($this->mixedToArray($tags['definition'])));
+        if (isset($tags[self::T_DEFINITION])) {
+            $this->definitions = array_merge($this->definitions, $tags[self::T_DEFINITION]);
+            $ret['definitions'] = array_merge($ret['definitions'], $this->parseModels($this->mixedToArray($tags[self::T_DEFINITION])));
         }
 
         $ret['info']['description'] = ApiDocParser::parseDocCommentDetail($classDoc);
 
-        if (isset($tags['version'])) {
-            $ret['info']['version'] = $tags['version'];
+        if (isset($tags[self::T_VERSION])) {
+            $ret['info']['version'] = $tags[self::T_VERSION];
         }
 
         $ret['info']['title'] = ApiDocParser::parseDocCommentSummary($classDoc);
 
-        if (isset($tags['termsOfService'])) {
-            $ret['info']['termsOfService'] = $tags['termsOfService'];
+        if (isset($tags[self::T_TOS])) {
+            $ret['info']['termsOfService'] = $tags[self::T_TOS];
         }
 
-        if (isset($tags['email'])) {
-            $ret['info']['contact'] = [
-                'email' => $tags['email'],
-            ];
+        if (isset($tags[self::T_CONTACT_EMAIL])) {
+            $ret['info']['contact']['email'] = $tags[self::T_CONTACT_EMAIL];
+        }
+        if (isset($tags[self::T_CONTACT_NAME])) {
+            $ret['info']['contact']['name'] = $tags[self::T_CONTACT_NAME];
+        }
+        if (isset($tags[self::T_CONTACT_URL])) {
+            $ret['info']['contact']['url'] = $tags[self::T_CONTACT_URL];
         }
 
-        if (isset($tags['license'])) {
-            $license = $this->tokenize($tags['license'], 2);
+        if (isset($tags[self::T_LICENSE])) {
+            $license = $this->tokenize($tags[self::T_LICENSE], 2);
             $ret['info']['license'] = [
                 'name' => $license[1],
                 'url' => $license[0],
             ];
         }
 
+        $ret['host'] = isset($tags[self::T_HOST]) ?
+                            $tags[self::T_HOST] :
+                            (isset($_SERVER['HTTP_HOST']) ?
+                                $_SERVER['HTTP_HOST'] :
+                                $_SERVER['SERVER_NAME']);
+
+        if (isset($tags[self::T_SCHEME])) {
+            $schemes = $this->mixedToArray($tags[self::T_SCHEME]);
+            foreach ($schemes as $scheme) {
+                $ret['schemes'][] = $scheme;
+            }
+        }
+
+        $produces = [];
+        if (isset($tags[self::T_PRODUCES])) {
+            $produces = $this->mixedToArray($tags[self::T_PRODUCES]);
+        }
+
         $tagsExternalDocs = [];
-        if (isset($tags['tagExternalDocs'])) {
-            $tagExternalDocs = $this->mixedToArray($tags['tagExternalDocs']);
+        if (isset($tags[self::T_TAG_EXTERNAL_DOC])) {
+            $tagExternalDocs = $this->mixedToArray($tags[self::T_TAG_EXTERNAL_DOC]);
             foreach ($tagExternalDocs as $externalDocs) {
                 list($tag, $url, $description) = $this->tokenize($externalDocs, 3);
                 $tagsExternalDocs[$tag] = [
@@ -141,39 +366,20 @@ class ApiGenerator implements Configurable
             }
         }
 
-        if (isset($tags['tag'])) {
-            foreach ($this->mixedToArray($tags['tag']) as $tag) {
+        if (isset($tags[self::T_TAG])) {
+            foreach ($this->mixedToArray($tags[self::T_TAG]) as $tag) {
                 $tagDef = array_combine(['name', 'description'], $this->tokenize($tag, 2));
                 if (isset($tagsExternalDocs[$tagDef['name']])) {
                     $tagDef['externalDocs'] = $tagsExternalDocs[$tagDef['name']];
                 }
                 $ret['tags'][] = $tagDef;
-
             }
-        }
-
-        $ret['basePath'] = isset($tags['basePath']) ? $tags['basePath'] : Url::to('/');
-        $ret['host'] = isset($tags['host']) ? $tags['host'] : Url::to('/', 1);
-
-        if (isset($tags['scheme'])) {
-            if (is_array($tags['scheme'])) {
-                foreach ($tags['scheme'] as $scheme) {
-                    $ret['schemes'][] = $scheme;
-                }
-            } else {
-                $ret['schemes'][] = $tags['scheme'];
-            }
-        }
-
-        $produces = [];
-        if (isset($tags['produces'])) {
-            $produces = $this->mixedToArray($tags['produces']);
         }
 
         $ret['paths'] = $this->parseMethods($class, $produces);
 
-        if (isset($tags['externalDocs'])) {
-            $externalDocs = $this->tokenize($tags['externalDocs'], 2);
+        if (isset($tags[self::T_EXTERNAL_DOC])) {
+            $externalDocs = $this->tokenize($tags[self::T_EXTERNAL_DOC], 2);
             $ret['externalDocs'] = [
                 'description' => $externalDocs[1],
                 'url' => $externalDocs[0],
@@ -213,6 +419,7 @@ class ApiGenerator implements Configurable
         $model = strpos($definition, '\\') === false ?
             $this->modelsNamespace . '\\' . $definition :
             $definition;
+
         if (!is_subclass_of($model, ApiModel::class)) {
             throw new Exception("The model definition for $model was not found", 501);
         }
@@ -258,7 +465,7 @@ class ApiGenerator implements Configurable
 
         foreach ($class->getProperties() as $property) {
             $tags = ApiDocParser::parseDocCommentTags($property->getDocComment());
-            list($type, $description) = $this->tokenize($tags['var'], 2);
+            list($type, $description) = $this->tokenize($tags[self::T_VAR], 2);
 
             $p = [];
             if (strpos($type, '[]') > 0) {
@@ -274,21 +481,21 @@ class ApiGenerator implements Configurable
                 $p['$ref'] = $this->getDefinition($type);
             } else {
                 $p['type'] = $type;
-                $enums = isset($tags['enum']) ? $this->mixedToArray($tags['enum']) : [];
+                $enums = isset($tags[self::T_ENUM]) ? $this->mixedToArray($tags[self::T_ENUM]) : [];
                 foreach ($enums as $enum) {
                     $p['enum'] = $this->tokenize($enum);
                 }
             }
 
-            if (isset($tags['format'])) {
-                $p['format'] = $tags['format'];
+            if (isset($tags[self::T_FORMAT])) {
+                $p['format'] = $tags[self::T_FORMAT];
             }
 
-            if (isset($tags['example'])) {
-                $p['example'] = $tags['example'];
+            if (isset($tags[self::T_EXAMPLE])) {
+                $p['example'] = $tags[self::T_EXAMPLE];
             }
 
-            if (isset($tags['required'])) {
+            if (isset($tags[self::T_REQUIRED])) {
                 $p['required'] = true;
             }
 
@@ -313,139 +520,162 @@ class ApiGenerator implements Configurable
      * @return array
      * @throws Exception
      */
-    private function parseMethods($class, $produces)
+    public function parseMethods($class, $produces)
     {
         $ret = [];
         foreach ($class->getMethods() as $method) {
-            $def = [];
 
-            $methodDoc = $method->getDocComment();
+            $def = $this->parseMethod($method, $produces);
 
-            if ($this->controller !== $method->class) {
-                continue;
-            }
+            if ($def) {
+                $methodDoc = $this->fetchDocComment($method);
+                $tags = ApiDocParser::parseDocCommentTags($methodDoc);
 
-            $tags = ApiDocParser::parseDocCommentTags($methodDoc);
-
-            if (!isset($tags['path'])) {
-                continue;
-            }
-
-            if (!in_array($tags['method'], $this->supportedMethods)) {
-                throw new Exception("Unknown HTTP method specified in {$method->name} : {$tags['method']}", 501);
-            }
-
-            $enums = isset($tags['enum']) ? $this->mixedToArray($tags['enum']) : [];
-            $availableEnums = [];
-            foreach ($enums as $enum) {
-                $data = $this->tokenize($enum);
-                $availableEnums[str_replace('$', '', array_shift($data))] = $data;
-            }
-
-            if (isset($tags['tag'])) {
-                $def['tags'] = $this->mixedToArray($tags['tag']);
-            }
-
-            $def['summary'] = ApiDocParser::parseDocCommentSummary($methodDoc);
-            $def['description'] = ApiDocParser::parseDocCommentDetail($methodDoc);
-
-            $def['operationId'] = $this->getOperationId($method);
-
-            if (isset($tags['consumes'])) {
-                $def['consumes'] = $this->mixedToArray($tags['consumes']);
-            }
-
-            if (isset($tags['produces'])) {
-                $def['produces'] = $this->mixedToArray($tags['produces']);
-            } elseif (!empty($produces)) {
-                $def['produces'] = $produces;
-            }
-
-            $def['parameters'] = $this->parseParameters($method, $tags, $availableEnums);
-
-            $def['responses'] = [];
-
-            if (isset($tags['default'])) {
-                $def['responses']['default'] = [
-                    'description' => $tags['default']
-                ];
-            }
-
-            if (isset($tags['return'])) {
-                list($type, $description) = $this->tokenize($tags['return'], 2);
-                $def['responses'][200] = [];
-                if (!empty($description)) {
-                    $def['responses'][200]['description'] = $description;
+                if (!isset($tags[self::T_PATH])) {
+                    continue;
                 }
 
-                $schema = [];
-                if (strpos($type, '[]') > 0) {
-                    $schema['type'] = 'array';
-                    $type = str_replace('[]', '', $type);
-                    if ($this->isDefinedType($type)) {
-                        $schema['items'] = ['$ref' => $this->getDefinition($type)];
-                    }
-                } elseif ($this->isDefinedType($type)) {
-                    $schema = ['$ref' => $this->getDefinition($type)];
-                } elseif (preg_match('!^Map\((.*)\)$!', $type, $matches)) {
-                    // Swaggers Map Primitive
-                    $schema['type'] = 'object';
-                    list($type, $format) = $this->getTypeAndFormat($matches[1]);
-                    $schema['additionalProperties'] = ['type' => $type];
-                    if (!is_null($format)) {
-                        $schema['additionalProperties']['format'] = $format;
-                    }
-                } else {
-                    $schema['type'] = $type;
+                if (!isset($ret[$tags[self::T_PATH]])) {
+                    $ret[$tags[self::T_PATH]] = [];
                 }
-                $def['responses'][200]['schema'] = $schema;
-                if (isset($tags['emitsHeader'])) {
-                    $def['responses'][200]['headers'] = [];
-                    $headers = $this->mixedToArray($tags['emitsHeader']);
-                    foreach ($headers as $header) {
-                        list($type, $name, $description) = $this->tokenize($header, 3);
-                        list($type, $format) = $this->getTypeAndFormat($type);
-                        $def['responses'][200]['headers'][$name] = [
-                            'type' => $type,
-                            'format' => $format,
-                            'description' => $description
-                        ];
-                    }
-                }
+                $ret[$tags[self::T_PATH]][$tags[self::T_METHOD]] = $def;
             }
-
-            if (isset($tags['errors'])) {
-                $errors = $this->mixedToArray($tags['errors']);
-                foreach ($errors as $error) {
-                    if (preg_match('!(\d+)\s+(.*)$!', $error, $matches)) {
-                        $def['responses'][$matches[1]] = ['description' => $matches[2]];
-                    }
-                }
-            }
-
-            if (isset($tags['security'])) {
-                $security = [];
-                $secs = $this->mixedToArray($tags['security']);
-                foreach ($secs as $sec) {
-                    list($bag, $permission) = $this->tokenize($sec, 2);
-                    if (!isset($security[$bag])) {
-                        $security[$bag] = [];
-                    }
-                    if (!empty($permission)) {
-                        $security[$bag][] = $permission;
-                    }
-                }
-                foreach ($security as $section => $privileges) {
-                    $def['security'][] = [$section => $privileges];
-                }
-            }
-
-            if (!isset($ret[$tags['path']])) {
-                $ret[$tags['path']] = [];
-            }
-            $ret[$tags['path']][$tags['method']] = $def;
         }
         return $ret;
+    }
+
+    /**
+     * @param ReflectionMethod $method
+     * @param bool $produces
+     * @return array
+     * @throws Exception
+     */
+    public function parseMethod($method, $produces = false)
+    {
+        $def = [];
+
+        $methodDoc = $this->fetchDocComment($method);
+
+        if ($this->controller !== $method->class && !is_subclass_of($this->controller, $method->class)) {
+            return false;
+        }
+
+        $tags = ApiDocParser::parseDocCommentTags($methodDoc);
+
+        if (!isset($tags[self::T_PATH])) {
+            return false;
+        }
+
+        if (!in_array($tags[self::T_METHOD], $this->supportedMethods)) {
+            throw new Exception("Unknown HTTP method specified in {$method->name} : {$tags[self::T_METHOD]}", 501);
+        }
+
+        $enums = isset($tags[self::T_ENUM]) ? $this->mixedToArray($tags[self::T_ENUM]) : [];
+        $availableEnums = [];
+        foreach ($enums as $enum) {
+            $data = $this->tokenize($enum);
+            $availableEnums[str_replace('$', '', array_shift($data))] = $data;
+        }
+
+        if (isset($tags[self::T_TAG])) {
+            $def['tags'] = $this->mixedToArray($tags[self::T_TAG]);
+        }
+
+        $def['summary'] = ApiDocParser::parseDocCommentSummary($methodDoc);
+        $def['description'] = ApiDocParser::parseDocCommentDetail($methodDoc);
+
+        $def['operationId'] = $this->getOperationId($method);
+
+        if (isset($tags[self::T_CONSUMES])) {
+            $def['consumes'] = $this->mixedToArray($tags[self::T_CONSUMES]);
+        }
+
+        if (isset($tags[self::T_PRODUCES])) {
+            $def['produces'] = $this->mixedToArray($tags[self::T_PRODUCES]);
+        } elseif (!empty($produces)) {
+            $def['produces'] = $produces;
+        }
+
+        $def['parameters'] = $this->parseParameters($method, $tags, $availableEnums);
+
+        $def['responses'] = [];
+
+        if (isset($tags[self::T_DEFAULT])) {
+            $def['responses']['default'] = [
+                'description' => $tags[self::T_DEFAULT]
+            ];
+        }
+
+        if (isset($tags[self::T_RETURN])) {
+            list($type, $description) = $this->tokenize($tags[self::T_RETURN], 2);
+            $def['responses'][200] = [];
+            if (!empty($description)) {
+                $def['responses'][200]['description'] = $description;
+            }
+
+            $schema = [];
+            if (strpos($type, '[]') > 0) {
+                $schema['type'] = 'array';
+                $type = str_replace('[]', '', $type);
+                if ($this->isDefinedType($type)) {
+                    $schema['items'] = ['$ref' => $this->getDefinition($type)];
+                }
+            } elseif ($this->isDefinedType($type)) {
+                $schema = ['$ref' => $this->getDefinition($type)];
+            } elseif (preg_match('!^Map\((.*)\)$!', $type, $matches)) {
+                // Swaggers Map Primitive
+                $schema['type'] = 'object';
+                list($type, $format) = $this->getTypeAndFormat($matches[1]);
+                $schema['additionalProperties'] = ['type' => $type];
+                if (!is_null($format)) {
+                    $schema['additionalProperties']['format'] = $format;
+                }
+            } else {
+                $schema['type'] = $type;
+            }
+            $def['responses'][200]['schema'] = $schema;
+            if (isset($tags[self::T_EMITS_HEADER])) {
+                $def['responses'][200]['headers'] = [];
+                $headers = $this->mixedToArray($tags[self::T_EMITS_HEADER]);
+                foreach ($headers as $header) {
+                    list($type, $name, $description) = $this->tokenize($header, 3);
+                    list($type, $format) = $this->getTypeAndFormat($type);
+                    $def['responses'][200]['headers'][$name] = [
+                        'type' => $type,
+                        'format' => $format,
+                        'description' => $description
+                    ];
+                }
+            }
+        }
+
+        if (isset($tags[self::T_ERRORS])) {
+            $errors = $this->mixedToArray($tags[self::T_ERRORS]);
+            foreach ($errors as $error) {
+                if (preg_match('!(\d+)\s+(.*)$!', $error, $matches)) {
+                    $def['responses'][$matches[1]] = ['description' => $matches[2]];
+                }
+            }
+        }
+
+        if (isset($tags[self::T_SECURITY])) {
+            $security = [];
+            $secs = $this->mixedToArray($tags[self::T_SECURITY]);
+            foreach ($secs as $sec) {
+                list($bag, $permission) = $this->tokenize($sec, 2);
+                if (!isset($security[$bag])) {
+                    $security[$bag] = [];
+                }
+                if (!empty($permission)) {
+                    $security[$bag][] = $permission;
+                }
+            }
+            foreach ($security as $section => $privileges) {
+                $def['security'][] = [$section => $privileges];
+            }
+        }
+
+        return $def;
     }
 
     /**
@@ -484,12 +714,12 @@ class ApiGenerator implements Configurable
      * @param array $availableEnums
      * @return array
      */
-    private function parseParameters($method, $tags, $availableEnums)
+    public function parseParameters($method, $tags, $availableEnums)
     {
         $ret = [];
         $constraints = [];
-        if (isset($tags['constraint'])) {
-            foreach ($this->mixedToArray($tags['constraint']) as $constraint) {
+        if (isset($tags[self::T_CONSTRAINT])) {
+            foreach ($this->mixedToArray($tags[self::T_CONSTRAINT]) as $constraint) {
                 list($type, $parameter, $value) = $this->tokenize($constraint, 3);
                 $parameter = ltrim($parameter, '$');
                 if (!isset($constraints[$parameter])) {
@@ -507,9 +737,9 @@ class ApiGenerator implements Configurable
                     $p = [];
                     $p['name'] = $name;
 
-                    $http_method = $tags['method'];
+                    $http_method = $tags[self::T_METHOD];
 
-                    $consumes = isset($tags['consumes']) ? $tags['consumes'] : '';
+                    $consumes = isset($tags[self::T_CONSUMES]) ? $tags[self::T_CONSUMES] : '';
                     switch ($consumes) {
                         case 'multipart/form-data':
                             $p['in'] = $this->haveParameter($method, $name) ? 'path' : 'formData';
@@ -521,13 +751,13 @@ class ApiGenerator implements Configurable
 
                         default:
                             if (in_array($http_method, ['put', 'post'])) {
-                                if ($this->isPathParameter($name, $tags['path'])) {
+                                if ($this->isPathParameter($name, $tags[self::T_PATH])) {
                                     $p['in'] = 'path';
                                 } else {
                                     $p['in'] = 'body';
                                 }
                             } else {
-                                if ($this->isPathParameter($name, $tags['path'])) {
+                                if ($this->isPathParameter($name, $tags[self::T_PATH])) {
                                     $p['in'] = 'path';
                                 } else {
                                     $p['in'] = $this->haveParameter($method, $name) ? 'query' : 'header';

@@ -37,6 +37,10 @@ class ApiDocParser {
             $comment = trim(substr($comment, 0, $matches[0][1]));
         }
 
+        if (empty($comment)) {
+            return '';
+        }
+
         $summary = self::parseDocCommentSummary($block);
         $pos = strpos($comment, $summary);
         if ($pos !== false) {
@@ -57,6 +61,7 @@ class ApiDocParser {
         $comment = "@description \n" . strtr(trim(preg_replace('/^\s*\**( |\t)?/m', '', trim($comment, '/'))), "\r", '');
         $parts = preg_split('/^\s*@/m', $comment, -1, PREG_SPLIT_NO_EMPTY);
         $tags = [];
+//        var_dump($parts);
         foreach ($parts as $part) {
             if (preg_match('/^(\w+)(.*)/ms', trim($part), $matches)) {
                 $name = $matches[1];

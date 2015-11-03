@@ -30,9 +30,6 @@ class ApiException extends Exception
         if (is_subclass_of($e, self::class)) {
             return $e;
         }
-        return new self([
-            'code' => $e->code,
-            'message' => $e->message
-        ]);
+        return new self($e->message, $e->code);
     }
 }

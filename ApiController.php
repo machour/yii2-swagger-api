@@ -47,7 +47,7 @@ abstract class ApiController extends BaseController
      * The exception message when the requested action is not found
      * @var string
      */
-    public $apiNotFoundMessage = 'Action not found';
+    public $apiNotFoundMessage = 'API action not found';
 
     /**
      * Whether to cache the generated api docs
@@ -75,6 +75,11 @@ abstract class ApiController extends BaseController
     ];
 
     /**
+     * @var string
+     */
+    public $versionsDirectory = 'versions/';
+
+    /**
      * @var ApiGenerator
      */
     private $generator;
@@ -87,6 +92,8 @@ abstract class ApiController extends BaseController
      */
     abstract function getSecurityDefinitions();
 
+    protected $version;
+
     /**
      * @inheritdoc
      */
@@ -95,6 +102,8 @@ abstract class ApiController extends BaseController
         if ($this->modelsNamespace == null) {
             throw new InvalidConfigException('The $modelsNamespace property must be set by your controller');
         }
+
+        $this->version = $this->module->id;
 
         parent::init();
 
@@ -115,7 +124,7 @@ abstract class ApiController extends BaseController
      */
     public function actionIndex()
     {
-        return $this->render('index');
+        return $this->render('@app/views/api/index');
     }
 
     /**
@@ -132,12 +141,18 @@ abstract class ApiController extends BaseController
      * @param string $action The requested action
      * @return object Returns the JSON or XML response
      * @throws Exception
+     * @throws \Exception Regular exceptions will be show if YII_DEBUG is true
      */
-    public function actionCall($version, $path, $action = null)
+    public function actionCall($path = null, $action = null)
     {
+
+        if ($this->module->id != $this->version) {
+            throw new Exception("Version number mismatch. (check your routes)");
+        }
+
         Yii::$app->response->format = Response::FORMAT_JSON;
 
-        if ($action == $this->swaggerDocumentationAction) {
+        if ($path == $this->swaggerDocumentationAction) {
             return $this->getSwaggerDocumentation();
         }
 
@@ -145,11 +160,13 @@ abstract class ApiController extends BaseController
 
         foreach ($class->getMethods() as $method) {
 
-            if ($method->class !== static::class) {
+            if ($method->class !== static::class && !is_subclass_of($method->class, self::class)) {
                 continue;
             }
 
-            $tags = ApiDocParser::parseDocCommentTags($method->getDocComment());
+           // var_dump($method, $method->class, static::class);
+
+            $tags = ApiDocParser::parseDocCommentTags($this->generator->fetchDocComment($method));
 
             if (!isset($tags['path'])) {
                 continue;
@@ -163,9 +180,39 @@ abstract class ApiController extends BaseController
                 try {
                     $get = Yii::$app->request->get();
                     unset($get['version'], $get['path'], $get['action']);
+
+                    $a = $this->generator->parseMethod($method);
+
+                    foreach ($a['parameters'] as $parameter) {
+
+                        // Test GET parameters
+                        if ($parameter['in'] == 'query') {
+                            if ($parameter['required'] && !isset($get[$parameter['name']])) {
+                                return $this->sendFailure(new ApiException("Missing required parameter: " . $parameter['name'], 400));
+                            } else {
+                                switch ($parameter['type']) {
+                                    case 'string':
+                                        if (is_array($get[$parameter['name']])) {
+                                            return $this->sendFailure(new ApiException(sprintf("Wrong parameter type for %s, string required but array seen", $parameter['name']), 400));
+                                        }
+                                        break;
+                                }
+                            }
+                        }
+
+                    }
+
                     return $this->sendSuccess($method->invokeArgs($this, $get));
+                } catch (ApiException $e) {
+                    return $this->sendFailure($e);
                 } catch (\Exception $e) {
-                    return $this->sendFailure(ApiException::fromException($e));
+                    if (YII_DEBUG) {
+                        // We are in development mode, use Yii built in error page
+                        Yii::$app->response->format = Response::FORMAT_HTML;
+                        throw $e;
+                    } else {
+                        return $this->sendFailure(new ApiException("Something went wrong", 501));
+                    }
                 }
             }
         }
@@ -226,7 +273,7 @@ abstract class ApiController extends BaseController
             if (file_exists($path)) {
                 $doc = file_get_contents($path);
             } else {
-                $doc = $this->generator->getJson();
+                $doc = $this->generator->getJson($this->version);
                 // Store the credentials to disk.
                 if (!is_dir(dirname($path))) {
                     mkdir(dirname($path), 0700, true);
@@ -234,7 +281,7 @@ abstract class ApiController extends BaseController
                 file_put_contents($path, Json::encode($doc));
             }
         } else {
-            $doc = $this->generator->getJson();
+            $doc = $this->generator->getJson($this->version);
         }
         return $doc;
     }
