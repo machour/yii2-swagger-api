@@ -23,7 +23,7 @@ class ApiTest extends TestCase
         $originalJson = Json::decode($original);
         $this->assertTrue(is_array($originalJson), 'Error decoding original swagger JSON');
 
-        $generated = file_get_contents('http://api.fly-car.local/v2/api/swagger.json');
+        $generated = file_get_contents('http://api.fly-car.local/v2/swagger.json');
         $generatedJson = Json::decode($generated);
 
         // Fake the host

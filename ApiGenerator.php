@@ -297,7 +297,7 @@ class ApiGenerator implements Configurable
 
         $classDoc = $this->fetchDocComment($class, ApiController::class);
         //$classDoc = $class->getDocComment();
-        $tags = ApiDocParser::parseDocCommentTags($classDoc);
+        $tags = self::parseDocCommentTags($classDoc);
 
         $this->definitions[] = 'ApiResponse';
         $ret['definitions']['ApiResponse'] = $this->parseModel('machour\\yii2\\swagger\\api\\ApiResponse', false);
@@ -306,13 +306,13 @@ class ApiGenerator implements Configurable
             $ret['definitions'] = array_merge($ret['definitions'], $this->parseModels($this->mixedToArray($tags[self::T_DEFINITION])));
         }
 
-        $ret['info']['description'] = ApiDocParser::parseDocCommentDetail($classDoc);
+        $ret['info']['description'] = self::parseDocCommentDetail($classDoc);
 
         if (isset($tags[self::T_VERSION])) {
             $ret['info']['version'] = $tags[self::T_VERSION];
         }
 
-        $ret['info']['title'] = ApiDocParser::parseDocCommentSummary($classDoc);
+        $ret['info']['title'] = self::parseDocCommentSummary($classDoc);
 
         if (isset($tags[self::T_TOS])) {
             $ret['info']['termsOfService'] = $tags[self::T_TOS];
@@ -464,7 +464,7 @@ class ApiGenerator implements Configurable
         $defaults = $class->getDefaultProperties();
 
         foreach ($class->getProperties() as $property) {
-            $tags = ApiDocParser::parseDocCommentTags($property->getDocComment());
+            $tags = self::parseDocCommentTags($property->getDocComment());
             list($type, $description) = $this->tokenize($tags[self::T_VAR], 2);
 
             $p = [];
@@ -529,7 +529,7 @@ class ApiGenerator implements Configurable
 
             if ($def) {
                 $methodDoc = $this->fetchDocComment($method);
-                $tags = ApiDocParser::parseDocCommentTags($methodDoc);
+                $tags = self::parseDocCommentTags($methodDoc);
 
                 if (!isset($tags[self::T_PATH])) {
                     continue;
@@ -560,7 +560,7 @@ class ApiGenerator implements Configurable
             return false;
         }
 
-        $tags = ApiDocParser::parseDocCommentTags($methodDoc);
+        $tags = self::parseDocCommentTags($methodDoc);
 
         if (!isset($tags[self::T_PATH])) {
             return false;
@@ -581,8 +581,8 @@ class ApiGenerator implements Configurable
             $def['tags'] = $this->mixedToArray($tags[self::T_TAG]);
         }
 
-        $def['summary'] = ApiDocParser::parseDocCommentSummary($methodDoc);
-        $def['description'] = ApiDocParser::parseDocCommentDetail($methodDoc);
+        $def['summary'] = self::parseDocCommentSummary($methodDoc);
+        $def['description'] = self::parseDocCommentDetail($methodDoc);
 
         $def['operationId'] = $this->getOperationId($method);
 
@@ -873,6 +873,73 @@ class ApiGenerator implements Configurable
             $chunks += array_fill(count($chunks), $limit, '');
         }
         return $chunks;
+    }
+
+    /**
+     * Returns the first line of doc block.
+     *
+     * @param string $block
+     * @return string
+     */
+    public static function parseDocCommentSummary($block)
+    {
+        $docLines = preg_split('~\R~u', $block);
+        if (isset($docLines[1])) {
+            return trim($docLines[1], "\t *");
+        }
+        return '';
+    }
+
+    /**
+     * Returns full description from the doc block.
+     *
+     * @param string $block
+     * @return string
+     */
+    public static function parseDocCommentDetail($block)
+    {
+        $comment = strtr(trim(preg_replace('/^\s*\**( |\t)?/m', '', trim($block, '/'))), "\r", '');
+        if (preg_match('/^\s*@\w+/m', $comment, $matches, PREG_OFFSET_CAPTURE)) {
+            $comment = trim(substr($comment, 0, $matches[0][1]));
+        }
+
+        if (empty($comment)) {
+            return '';
+        }
+
+        $summary = self::parseDocCommentSummary($block);
+        $pos = strpos($comment, $summary);
+        if ($pos !== false) {
+            $comment = trim(substr_replace($comment, '', $pos, strlen($summary)));
+        }
+
+        return $comment;
+    }
+
+    /**
+     * Parses the comment block into tags.
+     *
+     * @param string $comment the comment block
+     * @return array the parsed tags
+     */
+    public static function parseDocCommentTags($comment)
+    {
+        $comment = "@description \n" . strtr(trim(preg_replace('/^\s*\**( |\t)?/m', '', trim($comment, '/'))), "\r", '');
+        $parts = preg_split('/^\s*@/m', $comment, -1, PREG_SPLIT_NO_EMPTY);
+        $tags = [];
+        foreach ($parts as $part) {
+            if (preg_match('/^(\w+)(.*)/ms', trim($part), $matches)) {
+                $name = $matches[1];
+                if (!isset($tags[$name])) {
+                    $tags[$name] = trim($matches[2]);
+                } elseif (is_array($tags[$name])) {
+                    $tags[$name][] = trim($matches[2]);
+                } else {
+                    $tags[$name] = [$tags[$name], trim($matches[2])];
+                }
+            }
+        }
+        return $tags;
     }
 
 }

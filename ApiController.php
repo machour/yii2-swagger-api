@@ -164,9 +164,7 @@ abstract class ApiController extends BaseController
                 continue;
             }
 
-           // var_dump($method, $method->class, static::class);
-
-            $tags = ApiDocParser::parseDocCommentTags($this->generator->fetchDocComment($method));
+            $tags = ApiGenerator::parseDocCommentTags($this->generator->fetchDocComment($method));
 
             if (!isset($tags['path'])) {
                 continue;
