@@ -4,6 +4,7 @@ namespace machour\yii2\swagger\api;
 
 use ReflectionClass;
 use Yii;
+use yii\base\Action;
 use yii\base\Exception;
 use yii\base\InvalidConfigException;
 use yii\helpers\Json;
@@ -80,6 +81,21 @@ abstract class ApiController extends BaseController
     public $versionsDirectory = 'versions/';
 
     /**
+     * @var boolean
+     */
+    public $shutdown = false;
+
+    /**
+     * @var string
+     */
+    public $shutdownMessage = 'API disabled';
+
+    /**
+     * @var string
+     */
+    public $shutdownCode = 403;
+
+    /**
      * @var ApiGenerator
      */
     private $generator;
@@ -133,15 +149,36 @@ abstract class ApiController extends BaseController
     }
 
     /**
+     * @param Action $action
+     * @return bool
+     */
+    public function beforeAction($action)
+    {
+        if ($action->id == 'call') {
+
+            if (Yii::$app->request->headers->has('accept')) {
+                switch (Yii::$app->request->headers->get('accept')) {
+                    case 'application/xml':
+                        $this->format = Response::FORMAT_XML;
+                        break;
+
+                    case 'application/json':
+                        $this->format = Response::FORMAT_JSON;
+                        break;
+                }
+            }
+            Yii::$app->response->format = $this->format;
+        }
+        return parent::beforeAction($action);
+    }
+
+    /**
      * Catch all action
      *
      * All calls made to the API, including swagger json configuration calls
      * are forwarded to this action, which analyze the url, and forwards the
      * call accordingly, selecting the correct API version folder
      *
-     * @todo Add XML support
-     *
-     * @param string $version The api version number
      * @param string $path The requested path
      * @param string $action The requested action
      * @return object Returns the JSON or XML response
@@ -151,6 +188,10 @@ abstract class ApiController extends BaseController
     public function actionCall($path = null, $action = null)
     {
 
+        if ($this->shutdown) {
+            return $this->sendFailure(new ApiException($this->shutdownMessage, $this->shutdownCode));
+        }
+
         if ($this->module->id != $this->version) {
             throw new Exception("Version number mismatch. (check your routes)");
         }
@@ -158,19 +199,6 @@ abstract class ApiController extends BaseController
         if ($path == $this->swaggerDocumentationAction) {
             return $this->getSwaggerDocumentation();
         }
-
-        if (Yii::$app->request->headers->has('accept')) {
-            switch (Yii::$app->request->headers->get('accept')) {
-                case 'application/xml':
-                    $this->format = Response::FORMAT_XML;
-                    break;
-
-                case 'application/json':
-                    $this->format = Response::FORMAT_JSON;
-                    break;
-            }
-        }
-        Yii::$app->response->format = $this->format;
 
         $class = new ReflectionClass(static::class);
 
@@ -247,6 +275,24 @@ abstract class ApiController extends BaseController
 
         return $this->sendFailure(new ApiException($this->apiNotFoundMessage, $this->apiNotFoundCode));
 
+    }
+
+    /**
+     * Ask the controller not to run the API call, but to raise
+     * an ApiException instead
+     *
+     * @param string $message
+     * @param int $code
+     */
+    public function shutdown($message = null, $code = null)
+    {
+        if (!is_null($message)) {
+            $this->shutdownMessage = $message;
+        }
+        if (!is_null($code)) {
+            $this->shutdownCode = $code;
+        }
+        $this->shutdown = true;
     }
 
     /**
