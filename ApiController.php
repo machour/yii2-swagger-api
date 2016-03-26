@@ -192,6 +192,12 @@ abstract class ApiController extends BaseController
                                 return $this->sendFailure(new ApiException("Missing required parameter: " . $parameter['name'], 400));
                             } else {
                                 switch ($parameter['type']) {
+                                    case 'boolean':
+                                        // "false" => false
+                                        if (isset($get[$parameter['name']]) && $get[$parameter['name']] === 'false') {
+                                            $get[$parameter['name']] = false;
+                                        }
+                                        break;
                                     case 'string':
                                         if (isset($get[$parameter['name']]) && is_array($get[$parameter['name']])) {
                                             return $this->sendFailure(new ApiException(sprintf("Wrong parameter type for %s, string required but array seen", $parameter['name']), 400));
