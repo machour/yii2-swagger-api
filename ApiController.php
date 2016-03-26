@@ -181,8 +181,11 @@ abstract class ApiController extends BaseController
 
                     $a = $this->generator->parseMethod($method);
 
-                    foreach ($a['parameters'] as $parameter) {
+                    $args = [];
 
+                    $rParams = $method->getParameters();
+
+                    foreach ($a['parameters'] as $i => $parameter) {
                         // Test GET parameters
                         if ($parameter['in'] == 'query') {
                             if ($parameter['required'] && !isset($get[$parameter['name']])) {
@@ -190,17 +193,22 @@ abstract class ApiController extends BaseController
                             } else {
                                 switch ($parameter['type']) {
                                     case 'string':
-                                        if (is_array($get[$parameter['name']])) {
+                                        if (isset($get[$parameter['name']]) && is_array($get[$parameter['name']])) {
                                             return $this->sendFailure(new ApiException(sprintf("Wrong parameter type for %s, string required but array seen", $parameter['name']), 400));
                                         }
                                         break;
                                 }
                             }
+                            if ($parameter['required'] || isset($get[$parameter['name']])) {
+                                $args[$parameter['name']] = $get[$parameter['name']];
+                            } else {
+                                $args[$parameter['name']] = $rParams[$i]->getDefaultValue();
+                            }
                         }
 
                     }
 
-                    return $this->sendSuccess($method->invokeArgs($this, $get));
+                    return $this->sendSuccess($method->invokeArgs($this, $args));
                 } catch (ApiException $e) {
                     return $this->sendFailure($e);
                 } catch (\Exception $e) {
