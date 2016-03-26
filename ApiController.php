@@ -155,6 +155,10 @@ abstract class ApiController extends BaseController
             throw new Exception("Version number mismatch. (check your routes)");
         }
 
+        if ($path == $this->swaggerDocumentationAction) {
+            return $this->getSwaggerDocumentation();
+        }
+
         if (Yii::$app->request->headers->has('accept')) {
             switch (Yii::$app->request->headers->get('accept')) {
                 case 'application/xml':
@@ -167,10 +171,6 @@ abstract class ApiController extends BaseController
             }
         }
         Yii::$app->response->format = $this->format;
-
-        if ($path == $this->swaggerDocumentationAction) {
-            return $this->getSwaggerDocumentation();
-        }
 
         $class = new ReflectionClass(static::class);
 
