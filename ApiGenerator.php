@@ -386,7 +386,6 @@ class ApiGenerator implements Configurable
             ];
         }
 
-        Yii::$app->response->format = Response::FORMAT_JSON;
         return $ret;
     }
 

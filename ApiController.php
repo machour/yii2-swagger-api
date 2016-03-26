@@ -85,6 +85,11 @@ abstract class ApiController extends BaseController
     private $generator;
 
     /**
+     * @var string The response format
+     */
+    public $format = Response::FORMAT_JSON;
+
+    /**
      * Gets the security definitions for the API
      *
      * @abstract
@@ -150,7 +155,18 @@ abstract class ApiController extends BaseController
             throw new Exception("Version number mismatch. (check your routes)");
         }
 
-        Yii::$app->response->format = Response::FORMAT_JSON;
+        if (Yii::$app->request->headers->has('accept')) {
+            switch (Yii::$app->request->headers->get('accept')) {
+                case 'application/xml':
+                    $this->format = Response::FORMAT_XML;
+                    break;
+
+                case 'application/json':
+                    $this->format = Response::FORMAT_JSON;
+                    break;
+            }
+        }
+        Yii::$app->response->format = $this->format;
 
         if ($path == $this->swaggerDocumentationAction) {
             return $this->getSwaggerDocumentation();
@@ -278,6 +294,8 @@ abstract class ApiController extends BaseController
      */
     private function getSwaggerDocumentation()
     {
+        Yii::$app->response->format = Response::FORMAT_JSON;
+
         if ($this->apiDocsCacheEnabled) {
             $filename = str_replace('\\', '-', static::class);
             $path = Yii::getAlias($this->apiDocsCacheDirectory) . $filename . '.json';
