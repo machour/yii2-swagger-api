@@ -800,6 +800,9 @@ class ApiGenerator implements Configurable
                         if ($format !== null) {
                             $p['format'] = $format;
                         }
+                        if (isset($availableEnums[$name])) {
+                            $p['enum'] = $availableEnums[$name];
+                        }
                     }
                     $ret[] = $p;
                 }
