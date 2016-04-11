@@ -43,7 +43,7 @@ return [
             'rules' => [
                 '' => 'v2/api/index',
                 'v2/<path>/<action>' => 'v2/api/call',
-                'v2/<path>' => 'v2/api/call',
+                'v2/swagger.json' => 'v2/api/documentation',
             ],
         ],
         'i18n' => [

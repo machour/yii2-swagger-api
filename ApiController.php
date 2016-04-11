@@ -33,12 +33,6 @@ abstract class ApiController extends BaseController
     public $swaggerVersion = '2.0';
 
     /**
-     * Swagger documentation action
-     * @var string
-     */
-    public $swaggerDocumentationAction = 'swagger.json';
-
-    /**
      * The exception code when the requested action is not found
      * @var int
      */
@@ -196,10 +190,6 @@ abstract class ApiController extends BaseController
             throw new Exception("Version number mismatch. (check your routes)");
         }
 
-        if ($path == $this->swaggerDocumentationAction) {
-            return $this->getSwaggerDocumentation();
-        }
-
         $class = new ReflectionClass(static::class);
 
         foreach ($class->getMethods() as $method) {
@@ -283,6 +273,7 @@ abstract class ApiController extends BaseController
      *
      * @param string $message
      * @param int $code
+     * @return bool Returns TRUE
      */
     public function shutdown($message = null, $code = null)
     {
@@ -293,6 +284,7 @@ abstract class ApiController extends BaseController
             $this->shutdownCode = $code;
         }
         $this->shutdown = true;
+        return true;
     }
 
     /**
@@ -338,7 +330,7 @@ abstract class ApiController extends BaseController
      * @todo Automatically refresh the cache by checking controller and models mtimes
      * @return array The swagger documentation structure
      */
-    private function getSwaggerDocumentation()
+    public function actionDocumentation()
     {
         Yii::$app->response->format = Response::FORMAT_JSON;
 
@@ -378,6 +370,7 @@ abstract class ApiController extends BaseController
             case 'OPTIONS': return 'options';
             case 'HEAD': return 'head';
         }
+        throw new \Exception("Unknown HTTP Method", 400);
     }
 }
 
