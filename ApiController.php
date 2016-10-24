@@ -8,7 +8,7 @@ use yii\base\Action;
 use yii\base\Exception;
 use yii\base\InvalidConfigException;
 use yii\helpers\Json;
-use yii\web\Controller as BaseController;
+use yii\rest\ActiveController as BaseController;
 use yii\web\Response;
 
 /**
@@ -48,7 +48,7 @@ abstract class ApiController extends BaseController
      * Whether to cache the generated api docs
      * @var bool
      */
-    public $apiDocsCacheEnabled = true;
+    public $apiDocsCacheEnabled = YII_ENV_PROD;
 
     /**
      * The directory where the generated api docs will be cached
@@ -92,7 +92,7 @@ abstract class ApiController extends BaseController
     /**
      * @var ApiGenerator
      */
-    private $generator;
+    public $generator;
 
     /**
      * @var string The response format
@@ -105,7 +105,7 @@ abstract class ApiController extends BaseController
      * @abstract
      * @return array
      */
-    abstract function getSecurityDefinitions();
+    abstract public function getSecurityDefinitions();
 
     protected $version;
 
@@ -139,7 +139,7 @@ abstract class ApiController extends BaseController
      */
     public function actionIndex()
     {
-        return $this->render('@app/views/api/index');
+        return $this->render('@vendor/views/api/index');
     }
 
     /**

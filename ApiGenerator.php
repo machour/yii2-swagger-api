@@ -8,8 +8,12 @@ use ReflectionMethod;
 use Yii;
 use yii\base\Configurable;
 use yii\base\Exception;
+use yii\captcha\CaptchaValidator;
+use yii\helpers\ArrayHelper;
 use yii\helpers\Url;
+use yii\helpers\VarDumper;
 use yii\web\Response;
+use yii\web\ServerErrorHttpException;
 
 class ApiGenerator implements Configurable
 {
@@ -242,8 +246,8 @@ class ApiGenerator implements Configurable
      */
     public function fetchDocComment($reflection, $parent = null)
     {
-        //echo $reflection . "\n";
-        //echo $parent . "\n";
+//        echo $reflection . "\n";
+//        echo $parent . "\n";
 
         $found = false;
 
@@ -257,7 +261,7 @@ class ApiGenerator implements Configurable
             } else {
                 if ($reflection instanceof ReflectionMethod) {
                     $parentClass = $reflection->getDeclaringClass()->getParentClass();
-                    $reflection = $parentClass->getMethod($reflection->getName());
+					$reflection = $parentClass->getMethod($reflection->getName());
                 } else {
                     $reflection = $reflection->getParentClass();
                 }
@@ -275,22 +279,23 @@ class ApiGenerator implements Configurable
      * @return array The definition as an array
      * @throws Exception
      */
-    public function getJson($version)
+    public function getJson($version, $ret = [])
     {
-
-        $ret = [
-            'swagger' => $this->swaggerVersion,
-            'info' => [
-                'contact' => [],
-            ],
-            'host' => '',
-            'basePath' => '/' . $version,
-            'tags' => [],
-            'schemes' => [],
-            'paths' => [],
-            'securityDefinitions' => $this->securityDefinitions,
-            'definitions' => [],
-        ];
+		if(empty($ret)){
+			$ret = [
+				'swagger' => $this->swaggerVersion,
+				'info' => [
+					'contact' => [],
+				],
+				'host' => '',
+				'basePath' => '/' . $version,
+				'tags' => [],
+				'schemes' => [],
+				'paths' => [],
+				'securityDefinitions' => (Object)$this->securityDefinitions,
+				'definitions' => [],
+			];
+		}
 
 
         $class = new ReflectionClass($this->controller);
@@ -299,10 +304,14 @@ class ApiGenerator implements Configurable
         //$classDoc = $class->getDocComment();
         $tags = self::parseDocCommentTags($classDoc);
 
+		if (!empty($tags['basePath'])) {
+			$ret['basePath'] = $tags['basePath'];
+		}
+
         $this->definitions[] = 'ApiResponse';
         $ret['definitions']['ApiResponse'] = $this->parseModel('machour\\yii2\\swagger\\api\\ApiResponse', false);
         if (isset($tags[self::T_DEFINITION])) {
-            $this->definitions = array_merge($this->definitions, $tags[self::T_DEFINITION]);
+            $this->definitions = array_merge($this->definitions, $this->mixedToArray($tags[self::T_DEFINITION]));
             $ret['definitions'] = array_merge($ret['definitions'], $this->parseModels($this->mixedToArray($tags[self::T_DEFINITION])));
         }
 
@@ -372,11 +381,14 @@ class ApiGenerator implements Configurable
                 if (isset($tagsExternalDocs[$tagDef['name']])) {
                     $tagDef['externalDocs'] = $tagsExternalDocs[$tagDef['name']];
                 }
-                $ret['tags'][] = $tagDef;
+
+                if (!in_array($tagDef, $ret['tags'], true)) {
+                	$ret['tags'][] = $tagDef;
+				}
             }
         }
 
-        $ret['paths'] = $this->parseMethods($class, $produces);
+		$ret['paths'] = array_merge($ret['paths'], $this->parseMethods($class, $produces));
 
         if (isset($tags[self::T_EXTERNAL_DOC])) {
             $externalDocs = $this->tokenize($tags[self::T_EXTERNAL_DOC], 2);
@@ -419,9 +431,11 @@ class ApiGenerator implements Configurable
             $this->modelsNamespace . '\\' . $definition :
             $definition;
 
-        if (!is_subclass_of($model, ApiModel::class)) {
+//        if (!is_subclass_of($model, ApiModel::class)) { // TODO FIXME
+		if (!class_exists($model)) {
             throw new Exception("The model definition for $model was not found", 501);
-        }
+		}
+//        }
 
         $ret = [
             'type' => 'object',
@@ -462,51 +476,67 @@ class ApiGenerator implements Configurable
 
         $defaults = $class->getDefaultProperties();
 
+//		if ($class->name === 'eo\models\database\RecreationObject') {
+//			var_dump($class->getProperties());die();
+//		}
+
+		$commentPropertyTags	= self::parseDocComment($class->getDocComment());
+
+		$propertyTags	= [];
         foreach ($class->getProperties() as $property) {
-            $tags = self::parseDocCommentTags($property->getDocComment());
-            list($type, $description) = $this->tokenize($tags[self::T_VAR], 2);
+            $propertyTags[$property->name] = self::parseDocCommentTags($property->getDocComment());
+		}
 
-            $p = [];
-            if (strpos($type, '[]') > 0) {
-                $type = str_replace('[]', '', $type);
-                $p['type'] = 'array';
-                $p['xml'] = ['name' => preg_replace('!s$!', '', $property->name), 'wrapped' => true];
-                if ($this->isDefinedType($type)) {
-                    $p['items'] = ['$ref' => $this->getDefinition($type)];
-                } else {
-                    $p['items'] = ['type' => $type];
-                }
-            } elseif ($this->isDefinedType($type)) {
-                $p['$ref'] = $this->getDefinition($type);
-            } else {
-                $p['type'] = $type;
-                $enums = isset($tags[self::T_ENUM]) ? $this->mixedToArray($tags[self::T_ENUM]) : [];
-                foreach ($enums as $enum) {
-                    $p['enum'] = $this->tokenize($enum);
-                }
-            }
+		foreach (ArrayHelper::merge($commentPropertyTags, $propertyTags) as $propertyname => $tags) {
+			$p = [];
+			// TODO VAR voorvullen bij parseDocComment
+			if (!empty($tags[self::T_VAR]) && (!isset($tags['ignore']))) {
+				list($type, $description) = $this->tokenize($tags[self::T_VAR], 2);
+				if (strpos($type, '[]') > 0) {
+					$type = str_replace('[]', '', $type);
+					$p['type'] = 'array';
+					$p['xml'] = ['name' => preg_replace('!s$!', '', $propertyname), 'wrapped' => true];
+					if ($this->isDefinedType($type)) {
+						$p['items'] = ['$ref' => $this->getDefinition($type)];
+					} else {
+						$p['items'] = ['type' => $type];
+					}
+				} elseif ($this->isDefinedType($type)) {
+					$p['$ref'] = $this->getDefinition($type);
+				} else {
+					$p['type'] = $type;
+					$enums = isset($tags[self::T_ENUM]) ? $this->mixedToArray($tags[self::T_ENUM]) : [];
+					foreach ($enums as $enum) {
+						$p['enum'] = $this->tokenize($enum);
+					}
+				}
 
-            if (isset($tags[self::T_FORMAT])) {
-                $p['format'] = $tags[self::T_FORMAT];
-            }
+				if (isset($tags[self::T_FORMAT])) {
+					$p['format'] = $tags[self::T_FORMAT];
+				}
 
-            if (isset($tags[self::T_EXAMPLE])) {
-                $p['example'] = $tags[self::T_EXAMPLE];
-            }
+				if (isset($tags[self::T_EXAMPLE])) {
+					$p['example'] = $tags[self::T_EXAMPLE];
+				}
 
-            if (isset($tags[self::T_REQUIRED])) {
-                $p['required'] = true;
-            }
+				if (isset($tags[self::T_REQUIRED])) {
+					$p['required'] = true;
+				}
 
-            if (!empty($description)) {
-                $p['description'] = $description;
-            }
+				if (!empty($description)) {
+					$p['description'] = $description;
+				}
 
-            if (!is_null($defaults[$property->name])) {
-                $p['default'] = $defaults[$property->name];
-            }
+				if (isset($defaults[$propertyname]) && !is_null($defaults[$propertyname])) { // TODO isset toegevoegd, ok?
+					$p['default'] = $defaults[$propertyname];
+				}
 
-            $ret[$property->name] = $p;
+				$name	= $propertyname;
+				if ($propertyname[0] === '_') {
+					$propertyname = substr($propertyname, 1);
+				}
+				$ret[$name] = $p;
+			}
         }
         return $ret;
     }
@@ -522,25 +552,27 @@ class ApiGenerator implements Configurable
     public function parseMethods($class, $produces)
     {
         $ret = [];
-        foreach ($class->getMethods() as $method) {
+		if($class->getName() != '\machour\yii2\swagger\api\ApiGenerator'){
+			foreach ($class->getMethods() as $method) {
 
-            $def = $this->parseMethod($method, $produces);
+				$def = $this->parseMethod($method, $produces);
 
-            if ($def) {
-                $methodDoc = $this->fetchDocComment($method);
-                $tags = self::parseDocCommentTags($methodDoc);
+				if ($def) {
+					$methodDoc = $this->fetchDocComment($method);
+					$tags = self::parseDocCommentTags($methodDoc);
 
-                if (!isset($tags[self::T_PATH])) {
-                    continue;
-                }
+					if (!isset($tags[self::T_PATH])) {
+						continue;
+					}
 
-                if (!isset($ret[$tags[self::T_PATH]])) {
-                    $ret[$tags[self::T_PATH]] = [];
-                }
-                $ret[$tags[self::T_PATH]][$tags[self::T_METHOD]] = $def;
-            }
-        }
-        return $ret;
+					if (!isset($ret[$tags[self::T_PATH]])) {
+						$ret[$tags[self::T_PATH]] = [];
+					}
+					$ret[$tags[self::T_PATH]][$tags[self::T_METHOD]] = $def;
+				}
+			}
+		}
+		return $ret;
     }
 
     /**
@@ -553,6 +585,7 @@ class ApiGenerator implements Configurable
     {
         $def = [];
 
+		if ($method->name == 'indexDataProvider') return null; // TODO FIXME TODO
         $methodDoc = $this->fetchDocComment($method);
 
         if ($this->controller !== $method->class && !is_subclass_of($this->controller, $method->class)) {
@@ -606,6 +639,9 @@ class ApiGenerator implements Configurable
         }
 
         if (isset($tags[self::T_RETURN])) {
+        	if (is_array($tags[self::T_RETURN])) {
+        		throw new ServerErrorHttpException('Swagger; '.$method->name.' kan maximaal 1 return hebben');
+			}
             list($type, $description) = $this->tokenize($tags[self::T_RETURN], 2);
             $def['responses'][200] = [];
             if (!empty($description)) {
@@ -942,6 +978,48 @@ class ApiGenerator implements Configurable
             }
         }
         return $tags;
+    }
+
+    /**
+     * Parses the comment block.
+     *
+     * @param string $comment the comment block
+     * @return array the parsed tags
+     */
+    public static function parseDocComment($comment)
+    {
+		$allowedProps	= ['type', 'xml', 'type', 'format', 'example', 'required', 'description', 'default', 'ignore'];
+        $comment = "@description \n" . strtr(trim(preg_replace('/^\s*\**( |\t)?/m', '', trim($comment, '/'))), "\r", '');
+        $parts = preg_split('/^\s*@/m', $comment, -1, PREG_SPLIT_NO_EMPTY);
+        $tags = [];
+        foreach ($parts as $part) {
+            if (preg_match('/^(\w+)(.*)/m', trim($part), $matches)) {
+                $name = $matches[1];
+				$tags[] = [$name => trim($matches[2])];
+            }
+        }
+
+        $output	= [];
+        foreach ($tags as $index => $tag) {
+        	if (isset($tag['property'])) {
+        		$properties = [];
+				$propIndex = $index;
+        		while($propIndex > 0 && !empty($tags[$propIndex--])) {
+        			$keys = array_keys($tags[$propIndex]);
+        			if (!empty($keys) && in_array($keys[0], $allowedProps, true)) {
+						$properties	= $tags[$propIndex];
+					} else {
+						break;
+					}
+				}
+				$properties[self::T_VAR] = $tag['property'];
+
+				list ($type, $name) = explode(' ', $tag['property']);
+				$output[substr($name, 1)] = $properties;
+			}
+		}
+
+        return $output;
     }
 
 }
