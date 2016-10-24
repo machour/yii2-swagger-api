@@ -8,11 +8,7 @@ use ReflectionMethod;
 use Yii;
 use yii\base\Configurable;
 use yii\base\Exception;
-use yii\captcha\CaptchaValidator;
 use yii\helpers\ArrayHelper;
-use yii\helpers\Url;
-use yii\helpers\VarDumper;
-use yii\web\Response;
 use yii\web\ServerErrorHttpException;
 
 class ApiGenerator implements Configurable
