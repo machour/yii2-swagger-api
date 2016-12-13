@@ -472,10 +472,6 @@ class ApiGenerator implements Configurable
 
         $defaults = $class->getDefaultProperties();
 
-//		if ($class->name === 'eo\models\database\RecreationObject') {
-//			var_dump($class->getProperties());die();
-//		}
-
 		$commentPropertyTags	= self::parseDocComment($class->getDocComment());
 
 		$propertyTags	= [];

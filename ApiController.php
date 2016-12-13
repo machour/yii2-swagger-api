@@ -124,7 +124,7 @@ abstract class ApiController extends BaseController
 
         $this->generator = new ApiGenerator([
             'modelsNamespace' => $this->modelsNamespace,
-            'swaggerVersion' => '2.0',
+            'swaggerVersion' => $this->swaggerVersion,
             'swaggerDocumentationAction' => 'swagger.json',
             'securityDefinitions' => $this->getSecurityDefinitions(),
             'controller' => static::class,
